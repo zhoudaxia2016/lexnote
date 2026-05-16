@@ -1,0 +1,7 @@
+.env
+.wps_auth
+logs/
+node_modules/
+.playwright-mcp/
+.claude/
+.DS_Store
