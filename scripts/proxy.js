@@ -79,19 +79,20 @@ const server = http.createServer(async (req, res) => {
     let body = "";
     req.on("data", (c) => body += c);
     req.on("end", async () => {
-      let word, sourceTitle, sourceUrl;
+      let rawWord, candidateWord, sourceTitle, sourceUrl;
       try {
-        ({ word, sourceTitle, sourceUrl } = JSON.parse(body));
-        if (!word) throw new Error("Missing word");
+        ({ rawWord, candidateWord, sourceTitle, sourceUrl } = JSON.parse(body));
+        if (!rawWord && !candidateWord) throw new Error("Missing word");
+        const lookupWord = candidateWord || rawWord;
         let auth = await wps.getValidAuth();
         if (!auth) {
           res.writeHead(401, { "Content-Type": "application/json" });
           return res.end(JSON.stringify({ ok: false, needAuth: true, error: "Token expired. Please authorize." }));
         }
-        console.log(`🤖 ${word}`);
-        const ai = await analyzeWord({ word, sourceTitle, sourceUrl }, env.API_KEY, env.MODEL, LOG_DIR);
+        console.log(`🤖 ${lookupWord}`);
+        const ai = await analyzeWord({ rawWord, candidateWord: lookupWord, sourceTitle, sourceUrl }, env.API_KEY, env.MODEL, LOG_DIR);
         const fields = {
-          "单词": ai.word || word,
+          "单词": ai.word || lookupWord,
           "分类": ai.category,
           "意思": ai.meaning || "",
           "note": ai.note || "",
@@ -105,7 +106,7 @@ const server = http.createServer(async (req, res) => {
         console.error("❌", err.message);
         let friendly = err.message;
         if (err.message.includes("E_DBSHEET_VALUE_NOT_UNIQUE_IN_FIELD")) friendly = "单词已存在，无需重复添加";
-        logJSON(LOG_DIR, "add_vocab", { word, error: err.message });
+        logJSON(LOG_DIR, "add_vocab", { rawWord, candidateWord, error: err.message });
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: false, error: friendly }));
       }

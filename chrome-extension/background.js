@@ -30,6 +30,29 @@ function normalizeText(value, maxLen = 300) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLen);
 }
 
+function buildWordPayload(selectionText) {
+  const rawWord = normalizeText(selectionText, 200);
+  let candidateWord = rawWord
+    .replace(/([A-Za-z])-\s+([A-Za-z])/g, "$1$2")
+    .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const hasLetters = /[A-Za-z]/.test(candidateWord);
+  const isAllUpper = hasLetters && candidateWord === candidateWord.toUpperCase() && candidateWord !== candidateWord.toLowerCase();
+  const isLikelyAcronym = isAllUpper && /^[A-Z0-9-]{2,8}$/.test(candidateWord);
+  const isTitleCase = /^[A-Z][a-z]+(?:[-'][A-Za-z]+)?$/.test(candidateWord);
+
+  if (!isLikelyAcronym && (isTitleCase || isAllUpper)) {
+    candidateWord = candidateWord.toLowerCase();
+  }
+
+  return {
+    rawWord,
+    candidateWord: normalizeText(candidateWord, 200),
+  };
+}
+
 function formatSuccessMessage(result, fallbackWord) {
   const parts = [`✅ ${result.word || fallbackWord}: ${result.meaning || ""}`];
   if (result.category) parts.push(`[${result.category}]`);
@@ -101,20 +124,20 @@ async function proxyPost(endpoint, body) {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "add-vocab" || !info.selectionText) return;
-  const word = info.selectionText.trim();
-  if (!word) return;
+  const wordPayload = buildWordPayload(info.selectionText);
+  if (!wordPayload.rawWord) return;
   const usePanelToast = shouldUsePanelToast(info, tab);
   const sourcePayload = buildSourcePayload(info, tab);
-  debug(`📖 "${word}"`);
+  debug(`📖 "${wordPayload.rawWord}" → "${wordPayload.candidateWord}"`);
   try {
-    const result = await proxyPost("/api/vocab", { word, ...sourcePayload });
+    const result = await proxyPost("/api/vocab", { ...wordPayload, ...sourcePayload });
     if (result.needAuth) {
       if (usePanelToast) await showPanelToast("❌ Token 过期，请在侧边栏重新授权", "err");
       else await showToast(tab.id, "❌ Token 过期，请在侧边栏重新授权", "err");
       return;
     }
     if (!result.ok) throw new Error(result.error);
-    const text = formatSuccessMessage(result, word);
+    const text = formatSuccessMessage(result, wordPayload.rawWord);
     if (usePanelToast) await showPanelToast(text, "ok");
     else await showToast(tab.id, text, "ok");
     debug(`✅ ${text}`);
@@ -140,7 +163,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
   if (msg.type === "test-add") {
     proxyPost("/api/vocab", {
-      word: msg.word || "recurrence",
+      rawWord: msg.word || "recurrence",
+      candidateWord: msg.word || "recurrence",
       sourceTitle: "Concrete Mathematics",
       sourceUrl: "test://concrete-mathematics",
     })
