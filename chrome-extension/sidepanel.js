@@ -3,6 +3,7 @@
 // ── Load ─────────────────────────────────────────────────────
 async function load() {
   checkTokenStatus();
+  loadPanelToast();
 }
 
 // ── Token status ─────────────────────────────────────────────
@@ -73,6 +74,7 @@ function debugLog(msg) {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "debug") debugLog(msg.text);
+  if (msg.type === "panel-toast") showPanelToast(msg.text, msg.toastType || "");
 });
 
 async function loadDebugInfo() {
@@ -83,12 +85,64 @@ async function loadDebugInfo() {
   }
 }
 
+async function loadPanelToast() {
+  const stored = await chrome.storage.local.get(["panelToast"]);
+  if (!stored.panelToast?.text) return;
+  if (Date.now() - (stored.panelToast.ts || 0) > 5000) return;
+  showPanelToast(stored.panelToast.text, stored.panelToast.type || "");
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 function getVal(id) { return document.getElementById(id)?.value || ""; }
 function setVal(id, v) { const e = document.getElementById(id); if (e) e.value = v; }
 function showStatus(msg, cls, id = "status") {
   const el = document.getElementById(id);
   if (el) { el.textContent = msg; el.className = `status ${cls}`; }
+}
+
+let panelToastTimer = null;
+
+function ensurePanelToastEl() {
+  let el = document.getElementById("panelToast");
+  if (el) return el;
+
+  el = document.createElement("div");
+  el.id = "panelToast";
+  el.style.cssText = [
+    "position:fixed",
+    "top:12px",
+    "left:12px",
+    "right:12px",
+    "padding:10px 12px",
+    "border-radius:8px",
+    "font-size:12px",
+    "line-height:1.4",
+    "color:#fff",
+    "box-shadow:0 8px 24px rgba(0,0,0,0.18)",
+    "z-index:9999",
+    "opacity:0",
+    "transform:translateY(-6px)",
+    "transition:opacity 160ms ease, transform 160ms ease",
+    "pointer-events:none",
+  ].join(";");
+  document.body.appendChild(el);
+  return el;
+}
+
+function showPanelToast(msg, type) {
+  const el = ensurePanelToastEl();
+  const bg = type === "ok" ? "#2a8c4a" : type === "err" ? "#c92a2a" : "#555";
+  el.textContent = msg;
+  el.style.background = bg;
+  el.style.opacity = "1";
+  el.style.transform = "translateY(0)";
+  showStatus(msg, type || "");
+
+  if (panelToastTimer) clearTimeout(panelToastTimer);
+  panelToastTimer = setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transform = "translateY(-6px)";
+  }, 2600);
 }
 
 // ── Init ─────────────────────────────────────────────────────

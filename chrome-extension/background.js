@@ -15,6 +15,28 @@ function debug(msg) {
   chrome.runtime.sendMessage({ type: "debug", text: msg }).catch(() => {});
 }
 
+function isPdfPageUrl(rawUrl) {
+  if (!rawUrl) return false;
+  const text = String(rawUrl).toLowerCase();
+  return text.endsWith(".pdf") || text.includes(".pdf?") || text.includes(".pdf#");
+}
+
+function shouldUsePanelToast(info, tab) {
+  const urls = [info?.pageUrl, info?.frameUrl, tab?.url].filter(Boolean);
+  return urls.some((url) => url.startsWith("chrome-extension://") || isPdfPageUrl(url));
+}
+
+async function showPanelToast(text, type) {
+  await chrome.storage.local.set({
+    panelToast: {
+      text,
+      type,
+      ts: Date.now(),
+    },
+  });
+  chrome.runtime.sendMessage({ type: "panel-toast", text, toastType: type }).catch(() => {});
+}
+
 async function showToast(tabId, text, type) {
   const color = type === "ok" ? "#2a8c4a" : "err" ? "#c92a2a" : "#555";
   try {
@@ -29,7 +51,10 @@ async function showToast(tabId, text, type) {
       },
       args: [text, color],
     });
-  } catch (_) {}
+  } catch (err) {
+    debug(`ℹ️ 页面 Toast 注入失败: ${err.message}`);
+    await showPanelToast(text, type);
+  }
 }
 
 async function proxyPost(endpoint, body) {
@@ -41,20 +66,25 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId !== "add-vocab" || !info.selectionText) return;
   const word = info.selectionText.trim();
   if (!word) return;
+  const usePanelToast = shouldUsePanelToast(info, tab);
   debug(`📖 "${word}"`);
   try {
     const result = await proxyPost("/api/vocab", { word, chapter: "", page: "" });
     if (result.needAuth) {
-      showToast(tab.id, "❌ Token 过期，请在侧边栏重新授权", "err");
+      if (usePanelToast) await showPanelToast("❌ Token 过期，请在侧边栏重新授权", "err");
+      else await showToast(tab.id, "❌ Token 过期，请在侧边栏重新授权", "err");
       return;
     }
     if (!result.ok) throw new Error(result.error);
     const text = `✅ ${result.word || word}: ${result.meaning} [${result.category}]`;
-    showToast(tab.id, text, "ok");
+    if (usePanelToast) await showPanelToast(text, "ok");
+    else await showToast(tab.id, text, "ok");
     debug(`✅ ${text}`);
   } catch (err) {
     debug(`❌ ${err.message}`);
-    showToast(tab.id, `❌ ${err.message.substring(0, 40)}`, "err");
+    const text = `❌ ${err.message.substring(0, 40)}`;
+    if (usePanelToast) await showPanelToast(text, "err");
+    else await showToast(tab.id, text, "err");
   }
 });
 
