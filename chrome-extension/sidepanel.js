@@ -53,7 +53,9 @@ async function testAdd() {
   try {
     const resp = await chrome.runtime.sendMessage({ type: "test-add", word: "recurrence" });
     if (resp && resp.ok) {
-      showStatus(`测试成功! ${resp.word}: ${resp.meaning}`, "ok");
+      const text = formatResultMessage(resp, "测试成功");
+      showPanelToast(text, "ok");
+      debugLog(text);
     } else if (resp && resp.needAuth) {
       showStatus("Token 过期，请点击 WPS 授权登录", "err");
     } else {
@@ -98,6 +100,13 @@ function setVal(id, v) { const e = document.getElementById(id); if (e) e.value =
 function showStatus(msg, cls, id = "status") {
   const el = document.getElementById(id);
   if (el) { el.textContent = msg; el.className = `status ${cls}`; }
+}
+
+function formatResultMessage(result, prefix = "✅") {
+  const parts = [`${prefix} ${result.word || ""}: ${result.meaning || ""}`.trim()];
+  if (result.category) parts.push(`[${result.category}]`);
+  if (result.note) parts.push(`- ${result.note}`);
+  return parts.join(" ").trim();
 }
 
 let panelToastTimer = null;

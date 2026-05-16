@@ -26,6 +26,43 @@ function shouldUsePanelToast(info, tab) {
   return urls.some((url) => url.startsWith("chrome-extension://") || isPdfPageUrl(url));
 }
 
+function normalizeText(value, maxLen = 300) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLen);
+}
+
+function formatSuccessMessage(result, fallbackWord) {
+  const parts = [`✅ ${result.word || fallbackWord}: ${result.meaning || ""}`];
+  if (result.category) parts.push(`[${result.category}]`);
+  if (result.note) parts.push(`- ${result.note}`);
+  return normalizeText(parts.join(" "), 500);
+}
+
+function getSourceLabel(tab, info) {
+  const title = normalizeText(tab?.title || "", 120);
+  if (title) return title;
+
+  const url = info?.pageUrl || info?.frameUrl || tab?.url || "";
+  if (!url) return "";
+
+  try {
+    const parsed = new URL(url);
+    const rawName = parsed.pathname.split("/").filter(Boolean).pop() || "";
+    return normalizeText(decodeURIComponent(rawName), 120);
+  } catch {
+    return normalizeText(url, 120);
+  }
+}
+
+function buildSourcePayload(info, tab) {
+  const source = getSourceLabel(tab, info);
+  const sourceUrl = normalizeText(info?.pageUrl || info?.frameUrl || tab?.url || "", 500);
+
+  return {
+    sourceTitle: source,
+    sourceUrl,
+  };
+}
+
 async function showPanelToast(text, type) {
   await chrome.storage.local.set({
     panelToast: {
@@ -67,16 +104,17 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const word = info.selectionText.trim();
   if (!word) return;
   const usePanelToast = shouldUsePanelToast(info, tab);
+  const sourcePayload = buildSourcePayload(info, tab);
   debug(`📖 "${word}"`);
   try {
-    const result = await proxyPost("/api/vocab", { word, chapter: "", page: "" });
+    const result = await proxyPost("/api/vocab", { word, ...sourcePayload });
     if (result.needAuth) {
       if (usePanelToast) await showPanelToast("❌ Token 过期，请在侧边栏重新授权", "err");
       else await showToast(tab.id, "❌ Token 过期，请在侧边栏重新授权", "err");
       return;
     }
     if (!result.ok) throw new Error(result.error);
-    const text = `✅ ${result.word || word}: ${result.meaning} [${result.category}]`;
+    const text = formatSuccessMessage(result, word);
     if (usePanelToast) await showPanelToast(text, "ok");
     else await showToast(tab.id, text, "ok");
     debug(`✅ ${text}`);
@@ -101,7 +139,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg.type === "test-add") {
-    proxyPost("/api/vocab", { word: msg.word || "recurrence", chapter: "", page: "" })
+    proxyPost("/api/vocab", {
+      word: msg.word || "recurrence",
+      sourceTitle: "Concrete Mathematics",
+      sourceUrl: "test://concrete-mathematics",
+    })
       .then(sendResponse).catch(e => sendResponse({ ok: false, error: e.message }));
     return true;
   }

@@ -79,9 +79,9 @@ const server = http.createServer(async (req, res) => {
     let body = "";
     req.on("data", (c) => body += c);
     req.on("end", async () => {
-      let word, chapter, page;
+      let word, sourceTitle, sourceUrl;
       try {
-        ({ word, chapter, page } = JSON.parse(body));
+        ({ word, sourceTitle, sourceUrl } = JSON.parse(body));
         if (!word) throw new Error("Missing word");
         let auth = await wps.getValidAuth();
         if (!auth) {
@@ -89,13 +89,12 @@ const server = http.createServer(async (req, res) => {
           return res.end(JSON.stringify({ ok: false, needAuth: true, error: "Token expired. Please authorize." }));
         }
         console.log(`🤖 ${word}`);
-        const ai = await analyzeWord(word, env.API_KEY, env.MODEL, LOG_DIR);
+        const ai = await analyzeWord({ word, sourceTitle, sourceUrl }, env.API_KEY, env.MODEL, LOG_DIR);
         const fields = {
           "单词": ai.word || word,
           "分类": ai.category,
           "意思": ai.meaning || "",
-          "章节": chapter || "",
-          "页码": parseInt(page, 10) || 0,
+          "note": ai.note || "",
         };
         console.log(`📝 ${JSON.stringify(fields)}`);
         const result = await wps.createRecord(auth.access_token, fields);
