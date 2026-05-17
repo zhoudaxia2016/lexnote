@@ -33,6 +33,8 @@ items 规则：
 - 至少覆盖对理解当前片段有帮助的词；必要时补充固定短语。
 - word 用最终适合记忆或收录的形式：普通动词尽量还原原形，普通名词复数尽量还原单数。
 - phrase 用固定表达或真正需要整体理解的短语，不要把整句机械塞成一个 phrase。
+- 如果给了 phrase，且其中包含值得单独记忆、单独收录的实词，必须同时给出对应的 word 项；不要只给短语不给核心单词。
+- 只有当短语里的单词都过于基础、单独收录价值很低时，才可以只给 phrase。
 - type 只能是 "word" 或 "phrase"。
 - meaning 是当前语境下的意思，不是词典里最常见义的堆砌。
 - category 只在明显符合时填写，否则返回空字符串。
@@ -59,6 +61,7 @@ level 规则：
 
 示例：
 - "given the inclination" -> translation: "如果愿意的话", item: { word: "given the inclination", type: "phrase", meaning: "如果愿意的话", category: "", note: "固定表达，不按字面理解", level: "C1" }
+- "given the inclination" -> 同时还应给出 { word: "inclination", type: "word", meaning: "意愿；倾向", category: "", note: "这里指意愿，不是倾斜", level: "B2" }
 - "insight" -> item: { word: "insight", type: "word", meaning: "洞见；深入理解", category: "", note: "这里更接近看清问题结构", level: "B2" }
 - "recurrence" -> item: { word: "recurrence", type: "word", meaning: "递归；递推", category: "数学术语", note: "指递推关系或递归定义", level: "B2" }`;
 
