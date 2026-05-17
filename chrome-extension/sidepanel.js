@@ -40,7 +40,6 @@ function renderOverview(record) {
       <div class="record-title">
         <span class="record-title-text">翻译</span>
         <div class="record-title-meta">
-          <button id="openSettingsBtn" class="ghost-btn" type="button">设置</button>
           <button id="speakTopBtn" class="speak-btn" type="button">朗读</button>
         </div>
       </div>
@@ -57,7 +56,6 @@ function renderOverview(record) {
     <div class="record-title">
       <span class="record-title-text">翻译</span>
       <div class="record-title-meta">
-        <button id="openSettingsBtn" class="ghost-btn" type="button">设置</button>
         <button id="speakTopBtn" class="speak-btn" type="button">朗读</button>
       </div>
     </div>
@@ -160,8 +158,6 @@ function bindTopButtons() {
     speakBtn.disabled = !currentSpokenText;
     speakBtn.onclick = () => speakText(currentSpokenText);
   }
-  const settingsBtn = document.getElementById("openSettingsBtn");
-  if (settingsBtn) settingsBtn.onclick = () => chrome.runtime.openOptionsPage();
 }
 
 function bindCandidateButtons() {
@@ -187,7 +183,11 @@ async function collectItem(visibleIndex) {
   const target = visibleItems[visibleIndex];
   if (!target || target.type !== "word") return;
 
-  const response = await chrome.runtime.sendMessage({ type: "collect-item", item: target });
+  const response = await chrome.runtime.sendMessage({
+    type: "collect-item",
+    item: target,
+    context: currentRecord.selection || "",
+  });
   const updatedItems = currentRecord.items.map((item) => {
     if (item !== target) return item;
     return {
@@ -239,4 +239,10 @@ function escapeHtml(value) {
 
 document.addEventListener("DOMContentLoaded", () => {
   load();
+  const settingsBtn = document.getElementById("openSettingsBtn");
+  if (settingsBtn) {
+    settingsBtn.onclick = () => {
+      window.open(chrome.runtime.getURL("options.html"), "_blank", "noopener,noreferrer");
+    };
+  }
 });

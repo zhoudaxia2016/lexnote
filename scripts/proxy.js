@@ -61,13 +61,14 @@ function shouldCollectItem(item, rules) {
   return LEVEL_RANK[item.level] >= LEVEL_RANK[rules.collectAtOrAbove];
 }
 
-async function saveSingleItem(wpsClient, token, item, logDir) {
+async function saveSingleItem(wpsClient, token, item, context, logDir) {
   const fields = {
     "单词": item.word,
     "分类": item.category || "",
     "意思": item.meaning || "",
     "note": item.note || "",
     "level": item.level || "B2",
+    "context": context || "",
   };
 
   try {
@@ -82,13 +83,14 @@ async function saveSingleItem(wpsClient, token, item, logDir) {
   }
 }
 
-async function saveItems(wpsClient, token, items, rules, logDir) {
+async function saveItems(wpsClient, token, items, rules, context, logDir) {
   const results = [];
   for (const item of items) {
     const hidden = shouldHideItem(item, rules);
     const autoCollect = shouldCollectItem(item, rules);
     const enriched = {
       ...item,
+      context: context || "",
       hidden,
       autoCollect,
       saveStatus: autoCollect ? "pending" : "skipped",
@@ -106,6 +108,7 @@ async function saveItems(wpsClient, token, items, rules, logDir) {
       "意思": item.meaning || "",
       "note": item.note || "",
       "level": item.level,
+      "context": context || "",
     };
 
     try {
@@ -194,7 +197,7 @@ const server = http.createServer(async (req, res) => {
         }
         console.log(`🤖 ${effectiveText}`);
         const ai = await analyzeSelection({ rawText, normalizedText: effectiveText, sourceTitle, sourceUrl }, env.API_KEY, env.MODEL, LOG_DIR);
-        const items = await saveItems(wps, auth.access_token, ai.items, normalizedRules, LOG_DIR);
+        const items = await saveItems(wps, auth.access_token, ai.items, normalizedRules, rawText || effectiveText, LOG_DIR);
         const summary = {
           created: items.filter((item) => item.saveStatus === "created").length,
           exists: items.filter((item) => item.saveStatus === "exists").length,
@@ -224,14 +227,14 @@ const server = http.createServer(async (req, res) => {
     req.on("data", (c) => body += c);
     req.on("end", async () => {
       try {
-        const { item } = JSON.parse(body);
+        const { item, context } = JSON.parse(body);
         if (!item?.word || item.type !== "word") throw new Error("Invalid item");
         const auth = await wps.getValidAuth();
         if (!auth) {
           res.writeHead(401, { "Content-Type": "application/json" });
           return res.end(JSON.stringify({ ok: false, needAuth: true, error: "Token expired. Please authorize." }));
         }
-        const result = await saveSingleItem(wps, auth.access_token, item, LOG_DIR);
+        const result = await saveSingleItem(wps, auth.access_token, item, context || "", LOG_DIR);
         res.writeHead(result.ok ? 200 : 500, { "Content-Type": "application/json" });
         return res.end(JSON.stringify(result));
       } catch (err) {

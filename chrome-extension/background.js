@@ -242,7 +242,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg.type === "collect-item") {
-    proxyPost("/api/collect-item", { item: msg.item })
+    proxyPost("/api/collect-item", { item: msg.item, context: msg.context || "" })
       .then(sendResponse)
       .catch((e) => sendResponse({ ok: false, saveStatus: "save_failed", saveError: e.message, error: e.message }));
     return true;
