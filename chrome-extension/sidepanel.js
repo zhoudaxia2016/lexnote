@@ -4,6 +4,7 @@
 async function load() {
   checkTokenStatus();
   loadPanelToast();
+  updateSpeakButton("");
 }
 
 // ── Token status ─────────────────────────────────────────────
@@ -116,6 +117,8 @@ function buildRecord(result) {
   };
 }
 
+let currentSpokenWord = "";
+
 function formatResultMessage(record, prefix = "✅") {
   const parts = [`${prefix} ${record.word || ""}: ${record.meaning || ""}`.trim()];
   if (record.category) parts.push(`[${record.category}]`);
@@ -129,11 +132,13 @@ function renderWordRecord(record) {
   if (!record || (!record.word && !record.meaning && !record.category && !record.note)) {
     el.textContent = "";
     el.className = "word-record";
+    updateSpeakButton("");
     return;
   }
 
   const isError = record.category === "错误";
   el.className = isError ? "word-record word-record-error" : "word-record";
+  updateSpeakButton(isError ? "" : record.word || "");
 
   if (isError) {
     const rows = [
@@ -142,7 +147,7 @@ function renderWordRecord(record) {
       record.note ? { label: "原因", value: record.note } : null,
     ].filter(Boolean);
 
-    el.innerHTML = `<span class="record-title">翻译</span>` + rows.map((row) => `
+    el.innerHTML = buildRecordTitle() + rows.map((row) => `
       <div class="record-row">
         <span class="record-label record-label-error">${row.label}</span>
         <span class="record-value record-value-error">${escapeHtml(row.value)}</span>
@@ -158,12 +163,22 @@ function renderWordRecord(record) {
     record.note ? { label: "note", value: record.note, valueClass: "record-value-note" } : null,
   ].filter(Boolean);
 
-  el.innerHTML = `<span class="record-title">翻译</span>` + rows.map((row) => `
+  el.innerHTML = buildRecordTitle() + rows.map((row) => `
     <div class="record-row">
       <span class="record-label">${row.label}</span>
       <span class="record-value ${row.valueClass}">${escapeHtml(row.value)}</span>
     </div>
   `).join("");
+  bindSpeakButton();
+}
+
+function buildRecordTitle() {
+  return `
+    <div class="record-title">
+      <span class="record-title-text">翻译</span>
+      <button id="speakWordBtn" class="speak-btn" type="button">朗读</button>
+    </div>
+  `;
 }
 
 function escapeHtml(value) {
@@ -179,6 +194,29 @@ function applyPanelUpdate(msg, type, record = null) {
   if ((type || "") === "err") showStatus(msg, type || "");
   else showStatus("", "");
   if (record) renderWordRecord(record);
+}
+
+function updateSpeakButton(word) {
+  currentSpokenWord = String(word || "").trim();
+  const btn = document.getElementById("speakWordBtn");
+  if (!btn) return;
+  btn.disabled = !currentSpokenWord;
+}
+
+function bindSpeakButton() {
+  const btn = document.getElementById("speakWordBtn");
+  if (!btn) return;
+  btn.disabled = !currentSpokenWord;
+  btn.onclick = () => speakCurrentWord();
+}
+
+function speakCurrentWord() {
+  if (!currentSpokenWord || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(currentSpokenWord);
+  utterance.lang = "en-US";
+  utterance.rate = 0.9;
+  window.speechSynthesis.speak(utterance);
 }
 
 // ── Init ─────────────────────────────────────────────────────

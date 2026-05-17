@@ -39,11 +39,28 @@
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
     }
     .record-title {
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       font-size: 15px;
       font-weight: 600;
       color: #445469;
       margin-bottom: 10px;
+    }
+    .record-title-text { display: inline-block; }
+    .speak-btn {
+      border: 1px solid #c9d5e2;
+      background: #fff;
+      color: #355070;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .speak-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
     }
     .record-row {
       padding: 10px 0;
