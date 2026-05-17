@@ -1,47 +1,83 @@
 const { logJSON } = require("./utils");
 
-const SYSTEM_PROMPT = `你是一个词汇助手，帮助中文读者阅读英文数学教材。给定原始选中文本、程序归一化候选词及少量来源信息，只返回 JSON：
+const VALID_CATEGORIES = ["数学术语", "描述词", "连接词"];
+const VALID_LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
 
-{"word":"原词","meaning":"中文翻译","category":"数学术语"|"描述词"|"连接词"|"","note":"一句简短备注"}
+const SYSTEM_PROMPT = `你是一个阅读助手，帮助中文读者阅读英文数学教材。给定用户选中的英文片段（可以是单词、短语、半句或整句）及来源信息，只返回 JSON：
 
-word 规则：
-- 输出最终应该收录到生词表中的词典词形，优先用英文原形/基本形。
-- 优先参考 candidateWord，但如果 rawWord 显示它应保留大写、连字符或专有名词形式，可以修正。
-- 对普通动词，尽量还原为原形：如 investigated -> investigate, assuming -> assume。
-- 对普通名词复数，尽量还原为单数：如 recurrences -> recurrence。
-- 对形容词/副词的比较级、最高级，尽量还原为基本形。
-- 若是普通句首大写或普通全大写词，通常改回正常小写。
-- 若是缩写、专有名词、人名、术语固定写法，可保留原样或合适大小写。
-- 若该词本身就是固定术语写法、专名、缩写，或还原后反而不自然，则保留最合适的词形。
+{
+  "translation": "整句或整段的自然中文翻译",
+  "items": [
+    {
+      "word": "候选收录词或短语",
+      "type": "word 或 phrase",
+      "meaning": "当前语境下的中文意思",
+      "category": "数学术语"|"描述词"|"连接词"|"",
+      "note": "简短备注",
+      "level": "A1"|"A2"|"B1"|"B2"|"C1"|"C2"
+    }
+  ]
+}
 
-分类规则：
+总规则：
+- translation 要优先保证读者能直接看懂当前选中内容在文中的意思。
+- items 用来给出候选词/短语解释；允许既有 word 也有 phrase。
+- 只返回 JSON，不要其他文字。
+
+translation 规则：
+- 如果用户选中的是完整句子或接近完整句子，就给整句自然中文。
+- 如果用户选中的是短语或半句，就给该片段在原文里的自然中文。
+- 不要逐词硬译，优先中文自然表达。
+
+items 规则：
+- 至少覆盖对理解当前片段有帮助的词；必要时补充固定短语。
+- word 用最终适合记忆或收录的形式：普通动词尽量还原原形，普通名词复数尽量还原单数。
+- phrase 用固定表达或真正需要整体理解的短语，不要把整句机械塞成一个 phrase。
+- type 只能是 "word" 或 "phrase"。
+- meaning 是当前语境下的意思，不是词典里最常见义的堆砌。
+- category 只在明显符合时填写，否则返回空字符串。
+
+category 规则：
 - "数学术语"：在数学或科学中有严格专业定义的词汇，或是数学推导中的操作词。
-- "描述词"：作者用来评价某个论证、解法、构造之质量或难度的主观判断词，通常为形容词或副词。
-- "连接词"：标示句子之间逻辑关系（因果、转折、递进、举例、总结等）的功能词。
-- ""：不属于以上三类的任何词，一律返回空字符串。
+- "描述词"：作者用来评价某个论证、解法、构造之质量、性质或难度的词，通常为形容词、副词，或在句中起评价作用的动词。
+- "连接词"：标示句子之间逻辑关系（因果、转折、递进、举例、总结等）的功能词或短语。
+- ""：不属于以上三类时返回空字符串。
 
 note 规则：
-- 用中文写一句很短的备注，帮助用户过段时间回看时迅速想起这个词在阅读中的具体用法或易错点。
-- 备注必须具体、有区分度，优先说明：在数学语境里的含义、句中作用、与日常义的差别、容易误解的点。
-- 不要写来源介绍、频率判断、收录理由说明、流程说明。
-- 不要描述“这本书里常见/经常出现/值得收录/因断词才收录”这类元信息。
-- 不要只给词性或泛化标签，如“常见动词”“常见形容词”；要改写成这个词本身在阅读中的语义提示。
-- 不要解释收录过程，不要评价这本书，不要重复来源信息。
-- 如果只能想到空泛备注，就改写成更短的语义提示；仍然没有有效信息时，返回空字符串。
-- 最多 18 个汉字或等价长度，尽量像词典边注，而不是完整句子。
+- 用中文写一句很短的备注，帮助读者想起这个词/短语在当前片段里的特殊用法。
+- 优先说明：数学语境里的含义、句中作用、与日常义的差别、固定搭配的整体意思。
+- 不要写来源介绍、频率判断、收录理由、流程说明。
+- 如果没有特别值得提示的点，可以返回空字符串。
+- 最多 18 个汉字或等价长度。
 
-note 示例：
-- investigated -> word: "investigate", note: "表对对象作详细考察"
-- recurrences -> word: "recurrence", note: "指数学中的递归出现"
-- recurrent -> "表反复出现，不只是重复"
-- assuming -> "证明里表示先作假设"
+level 规则：
+- 用 CEFR 的 A1~C2 作为稳定等级。
+- A1/A2：基础常见词或极常见表达。
+- B1/B2：一般学术阅读中常见，但仍可能构成理解障碍。
+- C1/C2：高级、低频、抽象或需要较强语境能力才能掌握的词/短语。
+- 先按词/短语本身在一般英语中的难度定级，再参考当前语境是否会显著增加理解难度；不要随意漂移。
 
-只返回 JSON，不要其他文字。`;
+示例：
+- "given the inclination" -> translation: "如果愿意的话", item: { word: "given the inclination", type: "phrase", meaning: "如果愿意的话", category: "", note: "固定表达，不按字面理解", level: "C1" }
+- "insight" -> item: { word: "insight", type: "word", meaning: "洞见；深入理解", category: "", note: "这里更接近看清问题结构", level: "B2" }
+- "recurrence" -> item: { word: "recurrence", type: "word", meaning: "递归；递推", category: "数学术语", note: "指递推关系或递归定义", level: "B2" }`;
 
-async function analyzeWord(input, apiKey, model, logDir) {
+function normalizeItem(item) {
+  if (!item || typeof item !== "object") return null;
+  const type = item.type === "phrase" ? "phrase" : "word";
+  const category = VALID_CATEGORIES.includes(item.category) ? item.category : "";
+  const level = VALID_LEVELS.includes(item.level) ? item.level : "B2";
+  const word = String(item.word || "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const meaning = String(item.meaning || "").replace(/\s+/g, " ").trim().slice(0, 160);
+  const note = String(item.note || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!word || !meaning) return null;
+  return { word, type, meaning, category, note, level };
+}
+
+async function analyzeSelection(input, apiKey, model, logDir) {
   const payload = {
-    rawWord: input.rawWord,
-    candidateWord: input.candidateWord,
+    rawText: input.rawText,
+    normalizedText: input.normalizedText,
     sourceTitle: input.sourceTitle || "",
     sourceUrl: input.sourceUrl || "",
   };
@@ -61,16 +97,19 @@ async function analyzeWord(input, apiKey, model, logDir) {
     body: JSON.stringify(reqBody),
   });
   const data = await resp.json();
-  const result = JSON.parse(data.choices[0].message.content);
-  const validCategories = ["数学术语", "描述词", "连接词"];
-  result.word = String(result.word || input.candidateWord || input.rawWord || "").trim();
-  if (!validCategories.includes(result.category)) result.category = "";
-  result.note = String(result.note || "").replace(/\s+/g, " ").trim().slice(0, 80);
-  logJSON(logDir, "analyze_word", {
+  const parsed = JSON.parse(data.choices[0].message.content);
+  const translation = String(parsed.translation || payload.normalizedText || payload.rawText || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 500);
+  const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
+  const items = rawItems.map(normalizeItem).filter(Boolean);
+  const result = { translation, items };
+  logJSON(logDir, "analyze_selection", {
     request: payload,
     response: { result, raw: data.choices[0].message.content },
   });
   return result;
 }
 
-module.exports = { analyzeWord };
+module.exports = { analyzeSelection, VALID_CATEGORIES, VALID_LEVELS };
