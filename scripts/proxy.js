@@ -29,6 +29,11 @@ const wps = createClient(
   REDIRECT_URI,
 );
 
+function getFriendlySaveError(message) {
+  if (message.includes("E_DBSHEET_VALUE_NOT_UNIQUE_IN_FIELD")) return "单词已存在，无需重复添加";
+  return message;
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -98,14 +103,29 @@ const server = http.createServer(async (req, res) => {
           "note": ai.note || "",
         };
         console.log(`📝 ${JSON.stringify(fields)}`);
-        const result = await wps.createRecord(auth.access_token, fields);
-        logJSON(LOG_DIR, "add_vocab", { fields, response: result });
+        let saveStatus = "created";
+        let saveError = "";
+        let result = null;
+        try {
+          result = await wps.createRecord(auth.access_token, fields);
+          logJSON(LOG_DIR, "add_vocab", { fields, response: result, saveStatus });
+        } catch (err) {
+          const friendly = getFriendlySaveError(err.message);
+          if (err.message.includes("E_DBSHEET_VALUE_NOT_UNIQUE_IN_FIELD")) {
+            saveStatus = "exists";
+            saveError = friendly;
+            logJSON(LOG_DIR, "add_vocab", { fields, saveStatus, error: err.message });
+          } else {
+            saveStatus = "save_failed";
+            saveError = friendly;
+            logJSON(LOG_DIR, "add_vocab", { fields, saveStatus, error: err.message });
+          }
+        }
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, ...ai, fields }));
+        res.end(JSON.stringify({ ok: true, ...ai, fields, saveStatus, saveError }));
       } catch (err) {
         console.error("❌", err.message);
-        let friendly = err.message;
-        if (err.message.includes("E_DBSHEET_VALUE_NOT_UNIQUE_IN_FIELD")) friendly = "单词已存在，无需重复添加";
+        const friendly = getFriendlySaveError(err.message);
         logJSON(LOG_DIR, "add_vocab", { rawWord, candidateWord, error: err.message });
         res.writeHead(500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: false, error: friendly }));

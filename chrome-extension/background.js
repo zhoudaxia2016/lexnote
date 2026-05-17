@@ -1,7 +1,7 @@
 const PROXY = "http://localhost:21987";
 
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.contextMenus.create({ id: "add-vocab", title: "添加到生词表", contexts: ["selection"] });
+  chrome.contextMenus.create({ id: "add-vocab", title: "翻译", contexts: ["selection"] });
 });
 
 function debug(msg) {
@@ -59,6 +59,8 @@ function buildRecord(result, fallbackWord) {
     meaning: result.meaning || "",
     category: result.category || "",
     note: result.note || "",
+    saveStatus: result.saveStatus || "",
+    saveError: result.saveError || "",
   };
 }
 
@@ -161,8 +163,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
     if (!result.ok) throw new Error(result.error);
     const record = buildRecord(result, wordPayload.rawWord);
+    const toastType = record.saveStatus === "save_failed" ? "err" : "ok";
     const text = formatSuccessMessage(record);
-    if (usePanelToast) await showPanelToast(text, "ok", record);
+    if (usePanelToast) await showPanelToast(text, toastType, record);
     else await showToast(tab.id, text, "ok");
     debug(`✅ ${text}`);
   } catch (err) {

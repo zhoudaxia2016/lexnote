@@ -48,6 +48,11 @@
       margin-bottom: 10px;
     }
     .record-title-text { display: inline-block; }
+    .record-title-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
     .speak-btn {
       border: 1px solid #c9d5e2;
       background: #fff;
@@ -94,6 +99,26 @@
     }
     .record-label-error { color: #b42318; }
     .record-value-error { color: #7a271a; }
+    .save-badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    .save-badge-created {
+      background: #e7f6ec;
+      color: #1f6f43;
+    }
+    .save-badge-exists {
+      background: #eef2f7;
+      color: #445469;
+    }
+    .save-badge-failed {
+      background: #fde8e8;
+      color: #b42318;
+    }
   </style>
 </head>
 <body>

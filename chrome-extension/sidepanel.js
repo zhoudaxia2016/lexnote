@@ -114,6 +114,8 @@ function buildRecord(result) {
     meaning: result.meaning || "",
     category: result.category || "",
     note: result.note || "",
+    saveStatus: result.saveStatus || "",
+    saveError: result.saveError || "",
   };
 }
 
@@ -129,38 +131,24 @@ function formatResultMessage(record, prefix = "✅") {
 function renderWordRecord(record) {
   const el = document.getElementById("wordRecord");
   if (!el) return;
-  if (!record || (!record.word && !record.meaning && !record.category && !record.note)) {
+  if (!record || (!record.word && !record.meaning && !record.category && !record.note && !record.saveError)) {
     el.textContent = "";
     el.className = "word-record";
     updateSpeakButton("");
     return;
   }
+  currentRecord = record;
 
-  const isError = record.category === "错误";
-  el.className = isError ? "word-record word-record-error" : "word-record";
-  updateSpeakButton(isError ? "" : record.word || "");
-
-  if (isError) {
-    const rows = [
-      record.word ? { label: "单词", value: record.word } : null,
-      { label: "状态", value: "添加失败" },
-      record.note ? { label: "原因", value: record.note } : null,
-    ].filter(Boolean);
-
-    el.innerHTML = buildRecordTitle() + rows.map((row) => `
-      <div class="record-row">
-        <span class="record-label record-label-error">${row.label}</span>
-        <span class="record-value record-value-error">${escapeHtml(row.value)}</span>
-      </div>
-    `).join("");
-    return;
-  }
+  const isSaveFailed = record.saveStatus === "save_failed";
+  el.className = isSaveFailed ? "word-record word-record-error" : "word-record";
+  updateSpeakButton(record.word || "");
 
   const rows = [
     record.word ? { label: "单词", value: record.word, valueClass: "" } : null,
     record.meaning ? { label: "意思", value: record.meaning, valueClass: "" } : null,
     record.category ? { label: "分类", value: record.category, valueClass: "" } : null,
     record.note ? { label: "note", value: record.note, valueClass: "record-value-note" } : null,
+    isSaveFailed && record.saveError ? { label: "原因", value: record.saveError, valueClass: "record-value-error" } : null,
   ].filter(Boolean);
 
   el.innerHTML = buildRecordTitle() + rows.map((row) => `
@@ -173,12 +161,26 @@ function renderWordRecord(record) {
 }
 
 function buildRecordTitle() {
+  const badge = getSaveBadge(currentRecord);
   return `
     <div class="record-title">
       <span class="record-title-text">翻译</span>
-      <button id="speakWordBtn" class="speak-btn" type="button">朗读</button>
+      <div class="record-title-meta">
+        ${badge}
+        <button id="speakWordBtn" class="speak-btn" type="button">朗读</button>
+      </div>
     </div>
   `;
+}
+
+let currentRecord = null;
+
+function getSaveBadge(record) {
+  if (!record?.saveStatus) return "";
+  if (record.saveStatus === "created") return `<span class="save-badge save-badge-created">已新增</span>`;
+  if (record.saveStatus === "exists") return `<span class="save-badge save-badge-exists">已存在</span>`;
+  if (record.saveStatus === "save_failed") return `<span class="save-badge save-badge-failed">写入失败</span>`;
+  return "";
 }
 
 function escapeHtml(value) {
@@ -193,7 +195,10 @@ function escapeHtml(value) {
 function applyPanelUpdate(msg, type, record = null) {
   if ((type || "") === "err") showStatus(msg, type || "");
   else showStatus("", "");
-  if (record) renderWordRecord(record);
+  if (record) {
+    currentRecord = record;
+    renderWordRecord(record);
+  }
 }
 
 function updateSpeakButton(word) {
