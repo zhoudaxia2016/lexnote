@@ -53,8 +53,9 @@ async function testAdd() {
   try {
     const resp = await chrome.runtime.sendMessage({ type: "test-add", word: "recurrence" });
     if (resp && resp.ok) {
-      const text = formatResultMessage(resp, "测试成功");
-      showPanelToast(text, "ok");
+      const record = buildRecord(resp);
+      const text = formatResultMessage(record, "测试成功");
+      applyPanelUpdate(text, "ok", record);
       debugLog(text);
     } else if (resp && resp.needAuth) {
       showStatus("Token 过期，请点击 WPS 授权登录", "err");
@@ -76,7 +77,7 @@ function debugLog(msg) {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === "debug") debugLog(msg.text);
-  if (msg.type === "panel-toast") showPanelToast(msg.text, msg.toastType || "");
+  if (msg.type === "panel-toast") applyPanelUpdate(msg.text, msg.toastType || "", msg.record || null);
 });
 
 async function loadDebugInfo() {
@@ -90,8 +91,12 @@ async function loadDebugInfo() {
 async function loadPanelToast() {
   const stored = await chrome.storage.local.get(["panelToast"]);
   if (!stored.panelToast?.text) return;
-  if (Date.now() - (stored.panelToast.ts || 0) > 5000) return;
-  showPanelToast(stored.panelToast.text, stored.panelToast.type || "");
+  if (stored.panelToast.record) renderWordRecord(stored.panelToast.record);
+  if ((stored.panelToast.type || "") === "err") {
+    showStatus(stored.panelToast.text, stored.panelToast.type || "");
+  } else {
+    showStatus("", "");
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -102,56 +107,78 @@ function showStatus(msg, cls, id = "status") {
   if (el) { el.textContent = msg; el.className = `status ${cls}`; }
 }
 
-function formatResultMessage(result, prefix = "✅") {
-  const parts = [`${prefix} ${result.word || ""}: ${result.meaning || ""}`.trim()];
-  if (result.category) parts.push(`[${result.category}]`);
-  if (result.note) parts.push(`- ${result.note}`);
+function buildRecord(result) {
+  return {
+    word: result.word || "",
+    meaning: result.meaning || "",
+    category: result.category || "",
+    note: result.note || "",
+  };
+}
+
+function formatResultMessage(record, prefix = "✅") {
+  const parts = [`${prefix} ${record.word || ""}: ${record.meaning || ""}`.trim()];
+  if (record.category) parts.push(`[${record.category}]`);
+  if (record.note) parts.push(`- ${record.note}`);
   return parts.join(" ").trim();
 }
 
-let panelToastTimer = null;
+function renderWordRecord(record) {
+  const el = document.getElementById("wordRecord");
+  if (!el) return;
+  if (!record || (!record.word && !record.meaning && !record.category && !record.note)) {
+    el.textContent = "";
+    el.className = "word-record";
+    return;
+  }
 
-function ensurePanelToastEl() {
-  let el = document.getElementById("panelToast");
-  if (el) return el;
+  const isError = record.category === "错误";
+  el.className = isError ? "word-record word-record-error" : "word-record";
 
-  el = document.createElement("div");
-  el.id = "panelToast";
-  el.style.cssText = [
-    "position:fixed",
-    "top:12px",
-    "left:12px",
-    "right:12px",
-    "padding:10px 12px",
-    "border-radius:8px",
-    "font-size:12px",
-    "line-height:1.4",
-    "color:#fff",
-    "box-shadow:0 8px 24px rgba(0,0,0,0.18)",
-    "z-index:9999",
-    "opacity:0",
-    "transform:translateY(-6px)",
-    "transition:opacity 160ms ease, transform 160ms ease",
-    "pointer-events:none",
-  ].join(";");
-  document.body.appendChild(el);
-  return el;
+  if (isError) {
+    const rows = [
+      record.word ? { label: "单词", value: record.word } : null,
+      { label: "状态", value: "添加失败" },
+      record.note ? { label: "原因", value: record.note } : null,
+    ].filter(Boolean);
+
+    el.innerHTML = `<span class="record-title">翻译</span>` + rows.map((row) => `
+      <div class="record-row">
+        <span class="record-label record-label-error">${row.label}</span>
+        <span class="record-value record-value-error">${escapeHtml(row.value)}</span>
+      </div>
+    `).join("");
+    return;
+  }
+
+  const rows = [
+    record.word ? { label: "单词", value: record.word, valueClass: "" } : null,
+    record.meaning ? { label: "意思", value: record.meaning, valueClass: "" } : null,
+    record.category ? { label: "分类", value: record.category, valueClass: "" } : null,
+    record.note ? { label: "note", value: record.note, valueClass: "record-value-note" } : null,
+  ].filter(Boolean);
+
+  el.innerHTML = `<span class="record-title">翻译</span>` + rows.map((row) => `
+    <div class="record-row">
+      <span class="record-label">${row.label}</span>
+      <span class="record-value ${row.valueClass}">${escapeHtml(row.value)}</span>
+    </div>
+  `).join("");
 }
 
-function showPanelToast(msg, type) {
-  const el = ensurePanelToastEl();
-  const bg = type === "ok" ? "#2a8c4a" : type === "err" ? "#c92a2a" : "#555";
-  el.textContent = msg;
-  el.style.background = bg;
-  el.style.opacity = "1";
-  el.style.transform = "translateY(0)";
-  showStatus(msg, type || "");
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
-  if (panelToastTimer) clearTimeout(panelToastTimer);
-  panelToastTimer = setTimeout(() => {
-    el.style.opacity = "0";
-    el.style.transform = "translateY(-6px)";
-  }, 2600);
+function applyPanelUpdate(msg, type, record = null) {
+  if ((type || "") === "err") showStatus(msg, type || "");
+  else showStatus("", "");
+  if (record) renderWordRecord(record);
 }
 
 // ── Init ─────────────────────────────────────────────────────

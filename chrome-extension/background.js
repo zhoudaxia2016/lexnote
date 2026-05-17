@@ -53,10 +53,28 @@ function buildWordPayload(selectionText) {
   };
 }
 
-function formatSuccessMessage(result, fallbackWord) {
-  const parts = [`✅ ${result.word || fallbackWord}: ${result.meaning || ""}`];
-  if (result.category) parts.push(`[${result.category}]`);
-  if (result.note) parts.push(`- ${result.note}`);
+function buildRecord(result, fallbackWord) {
+  return {
+    word: result.word || fallbackWord || "",
+    meaning: result.meaning || "",
+    category: result.category || "",
+    note: result.note || "",
+  };
+}
+
+function buildErrorRecord(word, errorText) {
+  return {
+    word: word || "",
+    meaning: "",
+    category: "错误",
+    note: errorText || "",
+  };
+}
+
+function formatSuccessMessage(record) {
+  const parts = [`✅ ${record.word || ""}: ${record.meaning || ""}`];
+  if (record.category) parts.push(`[${record.category}]`);
+  if (record.note) parts.push(`- ${record.note}`);
   return normalizeText(parts.join(" "), 500);
 }
 
@@ -86,15 +104,16 @@ function buildSourcePayload(info, tab) {
   };
 }
 
-async function showPanelToast(text, type) {
+async function showPanelToast(text, type, record = null) {
   await chrome.storage.local.set({
     panelToast: {
       text,
       type,
+      record,
       ts: Date.now(),
     },
   });
-  chrome.runtime.sendMessage({ type: "panel-toast", text, toastType: type }).catch(() => {});
+  chrome.runtime.sendMessage({ type: "panel-toast", text, toastType: type, record }).catch(() => {});
 }
 
 async function showToast(tabId, text, type) {
@@ -132,19 +151,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   try {
     const result = await proxyPost("/api/vocab", { ...wordPayload, ...sourcePayload });
     if (result.needAuth) {
-      if (usePanelToast) await showPanelToast("❌ Token 过期，请在侧边栏重新授权", "err");
+      if (usePanelToast) await showPanelToast(
+        "❌ Token 过期，请在侧边栏重新授权",
+        "err",
+        buildErrorRecord(wordPayload.rawWord, "Token 过期，请重新授权")
+      );
       else await showToast(tab.id, "❌ Token 过期，请在侧边栏重新授权", "err");
       return;
     }
     if (!result.ok) throw new Error(result.error);
-    const text = formatSuccessMessage(result, wordPayload.rawWord);
-    if (usePanelToast) await showPanelToast(text, "ok");
+    const record = buildRecord(result, wordPayload.rawWord);
+    const text = formatSuccessMessage(record);
+    if (usePanelToast) await showPanelToast(text, "ok", record);
     else await showToast(tab.id, text, "ok");
     debug(`✅ ${text}`);
   } catch (err) {
     debug(`❌ ${err.message}`);
     const text = `❌ ${err.message.substring(0, 40)}`;
-    if (usePanelToast) await showPanelToast(text, "err");
+    if (usePanelToast) await showPanelToast(text, "err", buildErrorRecord(wordPayload.rawWord, err.message));
     else await showToast(tab.id, text, "err");
   }
 });

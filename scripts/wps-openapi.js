@@ -4,6 +4,15 @@ const querystring = require("querystring");
 const { httpsPost, logJSON, openBrowser } = require("./utils");
 
 function createClient(appId, appKey, fileId, sheetId, authPath, logDir, redirectUri) {
+  function isTransientNetworkError(err) {
+    const text = String(err?.message || err || "");
+    return text.includes("socket hang up")
+      || text.includes("ECONNRESET")
+      || text.includes("ETIMEDOUT")
+      || text.includes("EAI_AGAIN")
+      || text.includes("ECONNREFUSED");
+  }
+
   function loadAuth() {
     if (!fs.existsSync(authPath)) return null;
     try { return JSON.parse(fs.readFileSync(authPath, "utf-8")); } catch { return null; }
@@ -69,13 +78,26 @@ function createClient(appId, appKey, fileId, sheetId, authPath, logDir, redirect
     const url = `https://openapi.wps.cn${uri}`;
     const bodyObj = { prefer_id: false, records: [{ fields_value: JSON.stringify(fields) }] };
     const bodyStr = JSON.stringify(bodyObj);
-    const headers = kso1Sign("POST", uri, bodyStr);
-    headers["Authorization"] = `Bearer ${token}`;
-    const { status, body } = await httpsPost(url, headers, bodyStr);
-    const data = JSON.parse(body);
-    if (status !== 200) throw new Error(`WPS ${status}: ${body}`);
-    if (data.code !== undefined && data.code !== 0) throw new Error(`WPS error: ${data.msg || data.code}`);
-    return data;
+    let lastErr = null;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const headers = kso1Sign("POST", uri, bodyStr);
+        headers["Authorization"] = `Bearer ${token}`;
+        const { status, body } = await httpsPost(url, headers, bodyStr);
+        const data = JSON.parse(body);
+        if (status !== 200) throw new Error(`WPS ${status}: ${body}`);
+        if (data.code !== undefined && data.code !== 0) throw new Error(`WPS error: ${data.msg || data.code}`);
+        return data;
+      } catch (err) {
+        lastErr = err;
+        if (!isTransientNetworkError(err) || attempt === 3) break;
+        logJSON(logDir, "wps_retry", { attempt, error: err.message });
+        await new Promise((resolve) => setTimeout(resolve, attempt * 400));
+      }
+    }
+
+    throw lastErr;
   }
 
   async function handleOAuthCallback(code, res) {

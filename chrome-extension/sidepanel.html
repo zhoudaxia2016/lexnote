@@ -30,6 +30,53 @@
     .token-badge { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-left: 4px; }
     .token-badge.ok { background: #d4edda; color: #155724; }
     .token-badge.err { background: #f8d7da; color: #721c24; }
+    .word-record {
+      background: linear-gradient(180deg, #fbfcfe 0%, #f2f5f9 100%);
+      border: 1px solid #d9e2ec;
+      border-radius: 14px;
+      padding: 18px;
+      min-height: 168px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    }
+    .record-title {
+      display: block;
+      font-size: 15px;
+      font-weight: 600;
+      color: #445469;
+      margin-bottom: 10px;
+    }
+    .record-row {
+      padding: 10px 0;
+      border-bottom: 1px solid #e5ebf2;
+    }
+    .record-row:last-child { border-bottom: none; }
+    .record-label {
+      display: block;
+      font-size: 12px;
+      line-height: 1.2;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #6b7a8c;
+      margin-bottom: 6px;
+    }
+    .record-value {
+      display: block;
+      font-size: 30px;
+      line-height: 1.22;
+      color: #17212b;
+      word-break: break-word;
+    }
+    .record-value-note {
+      font-size: 24px;
+      color: #344256;
+    }
+    .word-record-error {
+      background: linear-gradient(180deg, #fff6f6 0%, #feecec 100%);
+      border-color: #f1b7b7;
+      box-shadow: 0 10px 24px rgba(120, 28, 28, 0.08);
+    }
+    .record-label-error { color: #b42318; }
+    .record-value-error { color: #7a271a; }
   </style>
 </head>
 <body>
@@ -47,10 +94,13 @@
 <section>
   <button class="btn btn-primary" id="saveBtn" style="display:none">保存</button>
   <button class="btn btn-outline" id="testBtn" style="width:100%;">测试: 添加 "recurrence"</button>
-  <div class="status" id="status"></div>
 </section>
 
 <hr />
+
+<section>
+  <div id="wordRecord" class="word-record"></div>
+</section>
 
 <section>
   <h3>调试日志
