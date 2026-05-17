@@ -153,12 +153,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   try {
     const result = await proxyPost("/api/vocab", { ...wordPayload, ...sourcePayload });
     if (result.needAuth) {
+      const authErrorRecord = buildErrorRecord(wordPayload.rawWord, "Token 过期，请重新授权");
       if (usePanelToast) await showPanelToast(
         "❌ Token 过期，请在侧边栏重新授权",
         "err",
-        buildErrorRecord(wordPayload.rawWord, "Token 过期，请重新授权")
+        authErrorRecord
       );
-      else await showToast(tab.id, "❌ Token 过期，请在侧边栏重新授权", "err");
+      else {
+        await showPanelToast("❌ Token 过期，请在侧边栏重新授权", "err", authErrorRecord);
+        await showToast(tab.id, "❌ Token 过期，请在侧边栏重新授权", "err");
+      }
       return;
     }
     if (!result.ok) throw new Error(result.error);
@@ -166,13 +170,20 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const toastType = record.saveStatus === "save_failed" ? "err" : "ok";
     const text = formatSuccessMessage(record);
     if (usePanelToast) await showPanelToast(text, toastType, record);
-    else await showToast(tab.id, text, "ok");
+    else {
+      await showPanelToast(text, toastType, record);
+      await showToast(tab.id, text, "ok");
+    }
     debug(`✅ ${text}`);
   } catch (err) {
     debug(`❌ ${err.message}`);
     const text = `❌ ${err.message.substring(0, 40)}`;
-    if (usePanelToast) await showPanelToast(text, "err", buildErrorRecord(wordPayload.rawWord, err.message));
-    else await showToast(tab.id, text, "err");
+    const errorRecord = buildErrorRecord(wordPayload.rawWord, err.message);
+    if (usePanelToast) await showPanelToast(text, "err", errorRecord);
+    else {
+      await showPanelToast(text, "err", errorRecord);
+      await showToast(tab.id, text, "err");
+    }
   }
 });
 
